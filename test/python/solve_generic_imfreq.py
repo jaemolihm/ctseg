@@ -64,6 +64,8 @@ if mpi.is_master_node():
     assert results.Sigma_dynamic is not None
     assert results.Sigma_HartreeFock is not None
     assert results.G_tau is not None
+    # nn(tau) is measured by default
+    assert results.Solver.results.nn_tau is not None
 
     with h5.HDFArchive("solve_generic_imfreq.out.h5", 'w') as A:
         A['G_tau'] = results.G_tau
@@ -74,3 +76,16 @@ if mpi.is_master_node():
         A['densities'] = results.Solver.results.densities
 
     h5diff("solve_generic_imfreq.out.h5", "solve_generic_imfreq.ref.h5", precision=2e-9)
+
+# measure_nn_tau=False turns the nn(tau) measurement off
+results_no_nn = solve_generic(
+    Delta_iw, h_loc0, h_int,
+    n_iw=n_iw,
+    n_tau=n_tau,
+    length_cycle=50,
+    n_warmup_cycles=100,
+    n_cycles=100,
+    measure_nn_tau=False,
+)
+if mpi.is_master_node():
+    assert results_no_nn.Solver.results.nn_tau is None

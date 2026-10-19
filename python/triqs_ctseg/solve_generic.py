@@ -71,7 +71,7 @@ def _prepare_solver(
     solver_params['measure_G_tau'] = not solve_density_only
     solver_params['measure_F_tau'] = not solve_density_only
     solver_params['measure_I_tau'] = solver_params.get('measure_I_tau', False) and not solve_density_only
-    solver_params['measure_nn_tau'] = not solve_density_only
+    solver_params['measure_nn_tau'] = solver_params.get('measure_nn_tau', True) and not solve_density_only
 
     # 'dlr_eps' is accepted as another name of the solve parameter 'dlr_epsilon'
     if 'dlr_eps' in solver_params:
@@ -176,6 +176,7 @@ def solve_generic(
     **solver_interface_params
         Solver and post-processing parameters (n_iw, n_tau, n_cycles, etc.).
         With measure_I_tau=True the self-energy is the symmetric improved estimator.
+        measure_nn_tau is on unless set to False.
 
     Returns
     -------
