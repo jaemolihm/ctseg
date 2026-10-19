@@ -73,9 +73,12 @@ def _prepare_solver(
     solver_params['measure_I_tau'] = solver_params.get('measure_I_tau', False) and not solve_density_only
     solver_params['measure_nn_tau'] = not solve_density_only
 
+    # 'dlr_eps' is accepted as another name of the solve parameter 'dlr_epsilon'
+    if 'dlr_eps' in solver_params:
+        solver_params.setdefault('dlr_epsilon', solver_params.pop('dlr_eps'))
     if isinstance(mesh, MeshDLRImFreq):
         solver_params.setdefault('dlr_omega_max', mesh.w_max)
-        solver_params.setdefault('dlr_eps', mesh.eps)
+        solver_params.setdefault('dlr_epsilon', mesh.eps)
         max_dlr_idx = max(abs(iw.index) for iw in mesh)
         if max_dlr_idx > n_iw:
             mpi.report(f"WARNING: n_iw = {n_iw} is smaller than the maximum DLR frequency index"
@@ -91,8 +94,9 @@ def _prepare_solver(
     S.h_loc0_mat = h_loc0_bl
 
     post_proc_params = {k: solver_params.pop(k, default) for k, default in _POST_PROC_DEFAULTS.items()}
-    post_proc_params['dlr_w_max'] = solver_params.pop('dlr_omega_max', None)
-    post_proc_params['dlr_eps'] = solver_params.pop('dlr_eps', None)
+    # The DLR parameters set both the nn_nu_dlr measurement mesh and the DLR mesh of the output
+    post_proc_params['dlr_w_max'] = solver_params.get('dlr_omega_max')
+    post_proc_params['dlr_eps'] = solver_params.get('dlr_epsilon')
 
     return S, n_tau, solver_params, post_proc_params
 
