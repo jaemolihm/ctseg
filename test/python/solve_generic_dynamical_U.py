@@ -7,7 +7,7 @@
 
 Mirrors the physics of dynamical_U.py.  Exercises:
   - _prepare_delta_tau D0_iw handling (Fourier + tail fit for MeshImFreq)
-  - compute_sigma_hartreefock picking up the dynamic screening term via
+  - compute_sigma_static picking up the dynamic screening term via
     extract_screen_matrix_from_D0_tau (triggered by analytic_hf=True
     AND a non-None solver.D0_tau)
 
@@ -79,7 +79,7 @@ if mpi.is_master_node():
     assert 'Chi_iw' not in results.keys()
 
     # analytic_hf=True with dynamic interactions picks up the D0 screening
-    # term in compute_sigma_hartreefock
+    # term in compute_sigma_static
     assert results.Sigma_HartreeFock is not None
 
     with h5.HDFArchive("solve_generic_dynamical_U.out.h5", 'w') as A:

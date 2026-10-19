@@ -7,9 +7,9 @@
 
 Exercises:
   - _prepare_delta_tau MeshDLRImFreq branch (make_gf_imtime, no tail fit)
-  - compute_sigma_hartreefock via analytic_hf=True (uses
+  - compute_sigma_static via analytic_hf=True (uses
     extract_u_tensor_from_h_int + densities)
-  - DLR output conversion in postprocess (dlr_w_max + dlr_eps pulled
+  - DLR output conversion in postprocess (dlr_omega_max + dlr_epsilon pulled
     from the Delta_iw mesh -> make_gf_dlr_imfreq applied to
     Sigma_iw / G_iw)
 """

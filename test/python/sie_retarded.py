@@ -8,8 +8,6 @@
 # asymmetric improved estimator must agree with it. Dropping the retarded exchange term
 # -FT[D(tau) G(tau)] of the sIE must break this agreement.
 
-from types import SimpleNamespace
-
 import numpy as np
 
 import triqs.utility.mpi as mpi
@@ -18,7 +16,7 @@ from triqs.gfs.descriptors import Function
 from triqs.operators import n
 
 from triqs_ctseg.solve_generic import solve_generic
-from triqs_ctseg.postprocessing import compute_sigma_exchange
+from triqs_ctseg.postprocessing import compute_sigma_retarded_exchange
 
 beta = 10.
 U = 4.
@@ -69,12 +67,8 @@ Sigma_dyson = avg(res.Sigma_iw_Dyson)
 Sigma_asym = avg(res.Sigma_iw_aIE)
 
 # sIE without the retarded part of Sigma^X
-S_noD = SimpleNamespace(gf_struct=S.gf_struct, h_int=S.h_int, beta=S.beta, n_iw=S.n_iw, D0_tau=None)
-# the static Fock term cancels in X_ret - X_stat
-P_zero = {bl: np.zeros((g.target_shape[0],) * 2) for bl, g in r.G_tau}
-X_ret = compute_sigma_exchange(S, r.G_tau, P_zero)
-X_stat = compute_sigma_exchange(S_noD, r.G_tau, P_zero)
-Sigma_noX = Sigma_sie - avg(X_ret) + avg(X_stat)
+X_ret = compute_sigma_retarded_exchange(S, r.G_tau)
+Sigma_noX = Sigma_sie - avg(X_ret)
 
 dev = {name: np.abs(s - Sigma_dyson).max()
        for name, s in [('sIE', Sigma_sie), ('asymmetric IE', Sigma_asym), ('sIE w/o retarded X', Sigma_noX)]}

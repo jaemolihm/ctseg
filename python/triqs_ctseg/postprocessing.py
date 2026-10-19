@@ -143,40 +143,7 @@ def extract_screen_matrix_from_D0_tau(blk2_D0_tau, gf_struct, return_4idx=False)
 
 
 # =============================================================================
-# Hartree-Fock self-energy
-# =============================================================================
-
-def compute_sigma_hartreefock(solver):
-    """
-    Compute the static Hartree-Fock self-energy with density-density interactions.
-    """
-    mpi.report('\nEvaluating static impurity self-energy analytically in density-density basis:')
-
-    block_name, index_in_block, _ = build_color_tables(solver.gf_struct)
-    n_color = len(block_name)
-
-    V = extract_u_tensor_from_h_int(h_int=solver.h_int, gf_struct=solver.gf_struct)
-    if solver.D0_tau is not None:
-        V += extract_screen_matrix_from_D0_tau(blk2_D0_tau=solver.D0_tau, gf_struct=solver.gf_struct)
-
-    densities = np.array([
-        solver.results.densities[block_name[c]][index_in_block[c]]
-        for c in range(n_color)
-    ], dtype=float)
-
-    # For each color c1, Sigma_HF_diag[c1] = sum_c2 V[c1,c2] * densities[c2]
-    hf_per_color = V.real @ densities
-
-    Sigma_HartreeFock = {}
-    c = 0
-    for blk_name, blk_dim in solver.gf_struct:
-        Sigma_HartreeFock[blk_name] = np.diag(hf_per_color[c:c + blk_dim]).astype(float)
-        c += blk_dim
-    return Sigma_HartreeFock
-
-
-# =============================================================================
-# Symmetric improved estimator: density matrix and exchange term
+# Static self-energy and the exchange term of the symmetric improved estimator
 # =============================================================================
 
 def _fourier_wo_moments(gf_tau, mesh):
@@ -188,17 +155,25 @@ def _fourier_wo_moments(gf_tau, mesh):
     return out
 
 
-def density_matrix_from_F(F_tau, G0_iw, h_loc0_mat):
+def compute_density_matrix(solver, G0_iw, h_loc0_mat):
     """
-    Density matrix P_ab = <c_b^dag c_a> = G_ab(0^-) of each block from G = G0 + G0 F^L at tau = 0^-,
+    Density matrix P_ab = <c_b^dag c_a> = G_ab(0^-) of each block, made hermitian. If F(tau) is
+    measured, from G = G0 + G0 F^L at tau = 0^-,
 
-        P = P^0 - int_0^beta dtau G0(beta - tau) F^L(tau),    P^0 = G0(0^-),
+        P = G0(0^-) - int_0^beta dtau G0(beta - tau) F^L(tau),
 
-    made hermitian. It uses the whole F^L(tau) curve, so it is much less noisy than the single
-    bin G(beta^-); for the diagonal, the segment densities are still more accurate.
-    G0(tau) is the Fourier transform of G0_iw with the known moments 1/(i nu) and h_loc0/(i nu)^2.
+    with G0(tau) the Fourier transform of G0_iw with the known moments 1/(i nu) and h_loc0/(i nu)^2;
+    this uses the whole F^L(tau) curve. Otherwise from the end bins of G(tau),
+
+        P = [1 + G(0^+) - G(beta^-)] / 2,    since G(0^+) = P - 1 and G(beta^-) = -P.
     """
+    F_tau = solver.results.F_tau
     P = {}
+    if F_tau is None:
+        for bl, g in solver.results.G_tau:
+            p = 0.5 * (np.eye(g.target_shape[0]) + g.data[0] - g.data[-1])
+            P[bl] = 0.5 * (p + p.conj().T)
+        return P
     for i, (bl, F) in enumerate(F_tau):
         dim = F.target_shape[0]
         moments = np.zeros((3, dim, dim), dtype=complex)
@@ -213,36 +188,48 @@ def density_matrix_from_F(F_tau, G0_iw, h_loc0_mat):
     return P
 
 
-def compute_sigma_exchange(solver, G_tau, P):
+def compute_sigma_static(solver, P):
     """
-    Exchange self-energy of the symmetric improved estimator,
+    Static self-energy Sigma(i nu -> inf) of each block,
 
-        Sigma^X_ab(i nu) = -U_ab P_ab - FT[D_ab(tau) G_ab(tau)]    (no sum over a, b),
+        Sigma_ab = delta_ab sum_c [U_ac + D0_ac(i nu = 0)] n_c - (1 - delta_ab) U_ab P_ab,
 
-    with P_ab = <c_b^dag c_a> = G_ab(0^-) the density matrix of each block (a dict of matrices,
-    e.g. from density_matrix_from_F). The static Fock term is restricted to a != b within a
-    block (the diagonal is part of Sigma^H). The retarded term is included if solver.D0_tau is
-    set, for all a, b in a block. Returns a BlockGf on the fermionic mesh with n_iw = solver.n_iw.
+    with U the instantaneous density-density interaction, D0 = 0 if solver.D0_tau is None, n_c the
+    segment densities and P the density matrix of each block (a dict of matrices). The retarded
+    exchange term -FT[D_ab(tau) G_ab(tau)] decays as 1/(i nu) and is not part of it.
+    """
+    U = extract_u_tensor_from_h_int(h_int=solver.h_int, gf_struct=solver.gf_struct).real
+    V = U.copy()
+    if solver.D0_tau is not None:
+        V += extract_screen_matrix_from_D0_tau(blk2_D0_tau=solver.D0_tau, gf_struct=solver.gf_struct)
+    densities = np.concatenate([np.asarray(solver.results.densities[bl], dtype=float) for bl, _ in solver.gf_struct])
+    hartree = V @ densities
+
+    Sigma_static = {}
+    c0 = 0
+    for bl, dim in solver.gf_struct:
+        sigma = -U[c0:c0 + dim, c0:c0 + dim] * P[bl]
+        np.fill_diagonal(sigma, hartree[c0:c0 + dim])
+        Sigma_static[bl] = sigma
+        c0 += dim
+    return Sigma_static
+
+
+def compute_sigma_retarded_exchange(solver, G_tau):
+    """
+    Retarded exchange self-energy of the symmetric improved estimator,
+
+        Sigma^X_ret,ab(i nu) = -FT[D_ab(tau) G_ab(tau)]    (no sum over a, b),
+
+    zero if solver.D0_tau is None. Returns a BlockGf on the fermionic mesh with n_iw = solver.n_iw.
     """
     from scipy.interpolate import CubicSpline
-
-    U = extract_u_tensor_from_h_int(h_int=solver.h_int, gf_struct=solver.gf_struct).real
 
     mesh = MeshImFreq(beta=solver.beta, statistic="Fermion", n_iw=solver.n_iw)
     Sigma_X = BlockGf(mesh=mesh, gf_struct=solver.gf_struct)
     Sigma_X.zero()
 
-    # Static Fock term: -U_ab P_ab
-    c0 = 0
-    for bl, dim in solver.gf_struct:
-        fock = np.zeros((dim, dim), dtype=complex)
-        for i, j in product(range(dim), repeat=2):
-            if i != j:
-                fock[i, j] = -U[c0 + i, c0 + j] * P[bl][i, j]
-        Sigma_X[bl].data[:] += fock
-        c0 += dim
-
-    # Retarded term: -FT[D_ab(tau) G_ab(tau)], D0 interpolated onto the G(tau) mesh
+    # D0 interpolated onto the G(tau) mesh
     if solver.D0_tau is not None:
         for bl, g_tau in G_tau:
             D0 = solver.D0_tau[bl, bl]
@@ -280,35 +267,37 @@ def postprocess_sigma(
     Steps:
     1. Fourier transform G(tau) to G(iw)
     2. Compute fermionic Weiss field g(iw) from Delta(tau)
-    3. Compute static self-energy Sigma_HF (analytically or via tail fitting)
-    4. Compute dynamic self-energy Sigma(iw): Dyson if F(tau) is not measured, the asymmetric
-       improved estimator F G^{-1} if F(tau) is measured, and the symmetric improved estimator
-       Sigma^H + Sigma^X + I - F^L G^{-1} F^R if I(tau) is measured. Each available estimator
-       is also returned separately, before tail fitting: Sigma_iw_Dyson (always), Sigma_iw_aIE
-       (if F(tau) is measured) and Sigma_iw_sIE (if I(tau) is measured), None otherwise.
-    5. Tail fitting on Sigma(iw)
-    6. Extract dynamic part (Sigma - Sigma_HF)
+    3. Static self-energy Sigma(i nu -> inf) (compute_sigma_static), if analytic_hf or for the
+       symmetric improved estimator
+    4. Self-energy estimators: Dyson (always), the asymmetric improved estimator F G^{-1} (if F(tau)
+       is measured) and the symmetric improved estimator Sigma^static + Sigma^X_ret + I - F^L G^{-1} F^R
+       (if F_R(tau) and I(tau) are measured), returned as Sigma_iw_Dyson, Sigma_iw_aIE and
+       Sigma_iw_sIE (None if not available). Sigma_iw is the last available one.
+    5. Tail fit of Sigma(iw), with the static self-energy as known 0th moment if analytic_hf, and
+       G(iw) from the Dyson equation
+    6. Static part Sigma_HartreeFock (step 3 if analytic_hf, else the tail of Sigma(iw)) and the
+       dynamic part Sigma - Sigma_HartreeFock
     """
     from triqs.gfs import iOmega_n
     from triqs.gfs.tools import inverse
 
     degenerate_blk = post_proc_params['degenerate_blk']
+    analytic_hf = post_proc_params['analytic_hf']
+    res = solver.results
 
     def symmetrize(gf):
         if symmetrize_func is not None and degenerate_blk:
             gf << symmetrize_func(gf, degenerate_blk)
 
     mesh = MeshImFreq(beta=solver.beta, statistic="Fermion", n_iw=solver.n_iw)
-    Sigma_iw = BlockGf(mesh=mesh, gf_struct=solver.gf_struct)
-    Sigma_iw.zero()
-    G_iw = Sigma_iw.copy()
-    G0_iw = Sigma_iw.copy()
+    G_iw = BlockGf(mesh=mesh, gf_struct=solver.gf_struct)
+    G0_iw = G_iw.copy()
 
     # 1. Fourier transform G(tau) to G(iw)
     Gf_known_moments = make_zero_tail(G_iw, n_moments=2)
     for i, bl in enumerate(G_iw.indices):
         Gf_known_moments[i][1] = np.eye(G_iw[bl].target_shape[0])
-        G_iw[bl].set_from_fourier(solver.results.G_tau[bl], Gf_known_moments[i])
+        G_iw[bl].set_from_fourier(res.G_tau[bl], Gf_known_moments[i])
     G_iw << make_hermitian(G_iw)
     symmetrize(G_iw)
 
@@ -330,83 +319,59 @@ def postprocess_sigma(
     G0_iw << make_hermitian(G0_iw)
     symmetrize(G0_iw)
 
-    def _report_sigma_hf(hf_dict):
-        for blk_name, hf_val in hf_dict.items():
-            mpi.report(f"Sigma_HF {blk_name}:")
-            mpi.report(f"    {hf_val}")
-        mpi.report("")
+    # If F_tau, F_R_tau and I_tau are measured, use the symmetric improved estimator (sIE)
+    F_R_tau = getattr(res, 'F_R_tau', None)
+    I_tau = getattr(res, 'I_tau', None)
+    use_sIE = res.F_tau is not None and F_R_tau is not None and I_tau is not None
 
-    # 3. Compute the HF self-energy
-    if post_proc_params['analytic_hf']:
-        Sigma_HartreeFock = compute_sigma_hartreefock(solver)
-
+    # 3. Static self-energy
+    if analytic_hf or use_sIE:
+        P = compute_density_matrix(solver, G0_iw, h_loc0_diag)
+        Sigma_static = compute_sigma_static(solver, P)
         if symmetrize_func is not None and degenerate_blk:
-            Sigma_HF_list = symmetrize_func(list(Sigma_HartreeFock.values()), degenerate_blk)
-            Sigma_HartreeFock = dict(zip(Sigma_HartreeFock.keys(), Sigma_HF_list))
+            Sigma_static = dict(zip(Sigma_static.keys(), symmetrize_func(list(Sigma_static.values()), degenerate_blk)))
 
-        _report_sigma_hf(Sigma_HartreeFock)
-        solver.Sigma_moments = {
-            blk_name: np.array([hf_val], dtype=complex)
-            for blk_name, hf_val in Sigma_HartreeFock.items()
-        }
-    else:
-        Sigma_HartreeFock = None
-        solver.Sigma_moments = None
-
-    # 4. Compute self-energy
+    # 4. Self-energy estimators
     Sigma_iw_Dyson = inverse(G0_iw) - inverse(G_iw)
     Sigma_iw_aIE = None
     Sigma_iw_sIE = None
-
-    res = solver.results
-    F_R_tau = getattr(res, 'F_R_tau', None)
-    I_tau = getattr(res, 'I_tau', None)
-
-    if res.F_tau is None:
-        mpi.report("F(tau) is not measured -> Compute the self-energy via the Dyson equation.\n")
-        Sigma_iw << Sigma_iw_Dyson
-    else:
+    if res.F_tau is not None:
+        # Asymmetric improved estimator (aIE)
         F_iw = _fourier_wo_moments(res.F_tau, mesh)
         symmetrize(F_iw)
-
         # Sigma = F G^{-1} as a matrix product within each block. F is not hermitian
         # (F(-iw)^dagger = G Sigma, not Sigma G), so only Sigma is made hermitian.
         Sigma_iw_aIE = F_iw * inverse(G_iw)
-        Sigma_iw_aIE << make_hermitian(Sigma_iw_aIE)
-        symmetrize(Sigma_iw_aIE)
+    if use_sIE:
+        # Symmetric improved estimator (sIE)
+        # The symmetric estimator uses G, F^L, F^R and I Fourier transformed with the same
+        # (zero) known 0th moment, not the tail-corrected G_iw used for Dyson and F G^{-1}.
+        G_iw_wo, F_R_iw, I_iw = (_fourier_wo_moments(x, mesh) for x in (res.G_tau, F_R_tau, I_tau))
+        for g in (G_iw_wo, F_R_iw, I_iw):
+            symmetrize(g)
+        Sigma_iw_sIE = compute_sigma_retarded_exchange(solver, res.G_tau) + I_iw - F_iw * inverse(G_iw_wo) * F_R_iw
+        for bl, g in Sigma_iw_sIE:
+            g.data[:] += Sigma_static[bl]
+    for Sigma_est in (Sigma_iw_Dyson, Sigma_iw_aIE, Sigma_iw_sIE):
+        if Sigma_est is not None:
+            Sigma_est << make_hermitian(Sigma_est)
+            symmetrize(Sigma_est)
 
-        if I_tau is None or F_R_tau is None:
-            mpi.report("F(tau) is measured -> Compute the self-energy via the improved estimator.\n")
-            Sigma_iw << Sigma_iw_aIE
-        else:
-            mpi.report("F(tau), F_R(tau) and I(tau) are measured -> Compute the self-energy via the "
-                       "symmetric improved estimator.\n")
-            # The symmetric estimator uses G, F^L, F^R and I Fourier transformed with the same
-            # (zero) known 0th moment, not the tail-corrected G_iw used for Dyson and F G^{-1}.
-            G_iw_wo = _fourier_wo_moments(res.G_tau, mesh)
-            F_R_iw = _fourier_wo_moments(F_R_tau, mesh)
-            I_iw = _fourier_wo_moments(I_tau, mesh)
-            for g in (G_iw_wo, F_R_iw, I_iw):
-                symmetrize(g)
+    if use_sIE:
+        mpi.report("F(tau), F_R(tau) and I(tau) are measured -> Compute the self-energy via the "
+                   "symmetric improved estimator.\n")
+        Sigma_iw = Sigma_iw_sIE.copy()
+    elif res.F_tau is not None:
+        mpi.report("F(tau) is measured -> Compute the self-energy via the improved estimator.\n")
+        Sigma_iw = Sigma_iw_aIE.copy()
+    else:
+        mpi.report("F(tau) is not measured -> Compute the self-energy via the Dyson equation.\n")
+        Sigma_iw = Sigma_iw_Dyson.copy()
 
-            Sigma_H = compute_sigma_hartreefock(solver)
-            if symmetrize_func is not None and degenerate_blk:
-                Sigma_H = dict(zip(Sigma_H.keys(), symmetrize_func(list(Sigma_H.values()), degenerate_blk)))
-            P = density_matrix_from_F(res.F_tau, G0_iw, h_loc0_diag)
-            Sigma_X = compute_sigma_exchange(solver, res.G_tau, P)
-            symmetrize(Sigma_X)
-            Sigma_HX = Sigma_X.copy()
-            for bl, g in Sigma_HX:
-                g.data[:] += Sigma_H[bl]
-
-            Sigma_iw_sIE = Sigma_HX + I_iw - F_iw * inverse(G_iw_wo) * F_R_iw
-            Sigma_iw_sIE << make_hermitian(Sigma_iw_sIE)
-            symmetrize(Sigma_iw_sIE)
-            Sigma_iw << Sigma_iw_sIE
-
-    Sigma_iw << make_hermitian(Sigma_iw)
-    symmetrize(Sigma_iw)
-
+    # 5. Tail fit, and G(iw) from the Dyson equation
+    solver.Sigma_moments = (
+        {bl: np.array([s], dtype=complex) for bl, s in Sigma_static.items()} if analytic_hf else None
+    )
     if post_proc_params['perform_tail_fit']:
         Sigma_iw = tail_fit(
             Sigma_iw,
@@ -415,30 +380,33 @@ def postprocess_sigma(
             fit_min_w=post_proc_params['fit_min_w'],
             fit_max_w=post_proc_params['fit_max_w'],
             fit_max_moment=post_proc_params['fit_max_moment'],
-            fit_known_moments=None,
+            fit_known_moments=solver.Sigma_moments,
         )
+        Sigma_iw << make_hermitian(Sigma_iw)
+        symmetrize(Sigma_iw)
 
-    Sigma_iw << make_hermitian(Sigma_iw)
-    symmetrize(Sigma_iw)
-
-    # 5. Update G(iw) with the fitted self-energy
     G_iw << inverse(inverse(G0_iw) - Sigma_iw)
     G_iw << make_hermitian(G_iw)
     symmetrize(G_iw)
 
-    if Sigma_HartreeFock is None:
-        Sigma_HartreeFock = {block: gf.fit_hermitian_tail()[0][0] for block, gf in Sigma_iw}
-        mpi.report("Extracting the static self-energy via tail fitting:")
-        _report_sigma_hf(Sigma_HartreeFock)
+    # 6. Static and dynamic parts
+    if analytic_hf:
+        mpi.report("Static self-energy, analytic:")
+        Sigma_HartreeFock = Sigma_static
+    else:
+        mpi.report("Static self-energy, from the tail of Sigma(iw):")
+        Sigma_HartreeFock = {bl: g.fit_hermitian_tail()[0][0] for bl, g in Sigma_iw}
+    for bl, hf_val in Sigma_HartreeFock.items():
+        mpi.report(f"Sigma_HF {bl}:\n    {hf_val}")
+    mpi.report("")
 
-    # 6. Extract the dynamic part (Sigma - Sigma_HF)
     Sigma_dynamic = Sigma_iw.copy()
     for bl, g in Sigma_dynamic:
         g << g - Sigma_HartreeFock[bl]
 
     return {
         'G_iw': G_iw,
-        'G_tau': solver.results.G_tau,
+        'G_tau': res.G_tau,
         'Sigma_iw': Sigma_iw,
         'Sigma_iw_Dyson': Sigma_iw_Dyson,
         'Sigma_iw_aIE': Sigma_iw_aIE,

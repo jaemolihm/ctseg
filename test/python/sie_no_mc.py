@@ -80,6 +80,18 @@ def test_postprocess_sigma_sie_recovers_exact_sigma():
     assert res_asym['Sigma_iw_sIE'] is None
     assert np.abs(res_asym['Sigma_iw_aIE']['ud'].data - res_asym['Sigma_iw']['ud'].data).max() < 1e-12
 
+    # analytic_hf: Sigma_HartreeFock and the tail-fit 0th moment are the exact Sigma^H + Sigma^X,
+    # with P from F^L, then from the end points of G(tau)
+    for F in (F_tau, None):
+        solver.results.F_tau = F
+        r = postprocess_sigma(solver, degenerate_blk=None, analytic_hf=True, perform_tail_fit=True,
+                              fit_max_moment=3, fit_min_n=None, fit_max_n=None, fit_min_w=None, fit_max_w=None)
+        err_hf = np.abs(r['Sigma_HartreeFock'][0] - Sigma_HX).max()
+        err_tail = np.abs(r['Sigma_iw']['ud'].fit_hermitian_tail()[0][0] - Sigma_HX).max()
+        print(f"P from {'F^L' if F is not None else 'G(tau) end points'}: "
+              f"max |Sigma_HF - Sigma^HX| = {err_hf:.2e}, max |Sigma_inf (tail) - Sigma^HX| = {err_tail:.2e}")
+        assert err_hf < 1e-6 and err_tail < 1e-6, (err_hf, err_tail)
+
 
 if mpi.is_master_node():
     test_postprocess_sigma_sie_recovers_exact_sigma()

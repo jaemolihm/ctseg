@@ -8,8 +8,8 @@
   density-density interactions, no Jperp)
 * `postprocess_sigma` returns the symmetric estimator as `Sigma_iw` if `I_tau` is measured, and returns each available
   estimator separately as `Sigma_iw_Dyson`, `Sigma_iw_aIE` and `Sigma_iw_sIE` (attributes of the `solve_generic` result)
-* Add `compute_sigma_exchange` for the static Fock and retarded exchange self-energy, and `density_matrix_from_F`
-  for the density matrix from F(tau), used for the Fock term
+* Add `compute_sigma_retarded_exchange` for the retarded exchange self-energy -FT[D G], and `compute_density_matrix`
+  for the density matrix used for the static Fock term (from F(tau) if measured, otherwise from the end points of G(tau))
 
 ## Version 4.0.1
 

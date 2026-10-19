@@ -18,7 +18,7 @@ import triqs.utility.mpi as mpi
 from triqs.gfs import inverse
 
 from triqs_ctseg.solve_generic import solve_generic
-from triqs_ctseg.postprocessing import _fourier_wo_moments, density_matrix_from_F
+from triqs_ctseg.postprocessing import _fourier_wo_moments, compute_density_matrix
 
 import sie_ed_model as model
 
@@ -62,7 +62,7 @@ dev = {
 dev['n_01'] = abs(-r.G_tau['ud'].data[-1, 0, 1] - ed['n_mat'][0, 1])
 dev['n_aa'] = np.abs(np.array(r.densities['ud']) - ed['densities']).max()
 # density matrix from F^L, as used for the Fock term
-P = density_matrix_from_F(r.F_tau, ed['G0_iw'], [model.h0_mat])['ud']
+P = compute_density_matrix(res.Solver, ed['G0_iw'], [model.h0_mat])['ud']
 dev['P (F^L)'] = np.abs(P - ed['n_mat']).max()
 
 if mpi.is_master_node():
