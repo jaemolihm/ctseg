@@ -74,9 +74,9 @@ results = solve_generic(
 
 if mpi.is_master_node():
     # postprocess_pi should NOT have fired (nn_nu_dlr not measured in ctseg)
-    assert 'Pi_iw' not in results.keys()
-    assert 'W_iw' not in results.keys()
-    assert 'Chi_iw' not in results.keys()
+    assert 'Pi_iw' not in results
+    assert 'W_iw' not in results
+    assert 'Chi_iw' not in results
 
     # analytic_hf=True with dynamic interactions picks up the D0 screening
     # term in compute_sigma_static

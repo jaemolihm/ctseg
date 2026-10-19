@@ -183,6 +183,7 @@ def solve_generic(
     SolverResults
         The separate self-energy estimators are attached as the attributes Sigma_iw_Dyson,
         Sigma_iw_aIE (F G^{-1}, if F is measured) and Sigma_iw_sIE (if I is measured), None otherwise.
+        With D0_iw and measure_nn_nu_dlr=True, Pi_iw, W_iw and Chi_iw are attached as attributes too.
     """
     S, post_proc_params = _run_solver(
         Delta_iw, h_loc0, h_int, D0_iw,
@@ -190,13 +191,13 @@ def solve_generic(
     )
 
     pp_results = postprocess(S, symmetrize_func=symmetrize_func, **post_proc_params)
-    # SolverResults has no fields for the separate self-energy estimators; attach them as attributes
-    estimators = {k: pp_results.pop(k, None) for k in ('Sigma_iw_Dyson', 'Sigma_iw_aIE', 'Sigma_iw_sIE')}
-    result_kwargs = {k: v for k, v in pp_results.items() if v is not None}
-    result_kwargs['Solver'] = S
-    results = SolverResults(**result_kwargs)
-    for k, v in estimators.items():
-        setattr(results, k, v)
+    # SolverResults has no fields for the separate self-energy estimators and for Pi_iw, W_iw and
+    # Chi_iw; attach them as attributes
+    fields = SolverResults.__dataclass_fields__
+    results = SolverResults(Solver=S, **{k: v for k, v in pp_results.items() if k in fields and v is not None})
+    for k, v in pp_results.items():
+        if k not in fields:
+            setattr(results, k, v)
     return results
 
 

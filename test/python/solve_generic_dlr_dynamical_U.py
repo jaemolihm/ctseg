@@ -66,6 +66,27 @@ results = solve_generic(
     analytic_hf=True,
 )
 
+# measure_nn_nu_dlr=True with D0_iw: postprocess_pi runs, and Pi_iw, W_iw, Chi_iw are returned as attributes
+# on the bosonic DLR mesh (n_iw < n_tau_bosonic / 2, as the Fourier transform of D0 in postprocess_pi requires)
+results_pi = solve_generic(
+    Delta_iw, h_loc0, h_int, D0_iw=D0_iw,
+    n_iw=400,
+    n_tau=n_tau,
+    n_tau_bosonic=n_tau_bosonic,
+    length_cycle=50,
+    n_warmup_cycles=100,
+    n_cycles=1000,
+    analytic_hf=True,
+    measure_nn_tau=False,
+    measure_nn_nu_dlr=True,
+)
+
+if mpi.is_master_node():
+    for k in ('Pi_iw', 'W_iw', 'Chi_iw'):
+        assert k in results_pi, f"{k} missing"
+        mesh = getattr(results_pi, k).mesh
+        assert isinstance(mesh, MeshDLRImFreq) and mesh.statistic == 'Boson', f"{k}: {mesh}"
+
 if mpi.is_master_node():
     # DLR output conversion should have been applied
     sigma_mesh_type = type(results.Sigma_iw.mesh).__name__
