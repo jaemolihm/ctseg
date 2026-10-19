@@ -22,6 +22,10 @@ set(all_tests
   ./solve_generic_dynamical_U
   ./solve_generic_dlr_dynamical_U
   ./solve_density
+  ./sie_error_paths
+  ./sie_no_mc
+  ./sie_ed
+  ./sie_retarded
 )
 
 foreach(test ${all_tests})

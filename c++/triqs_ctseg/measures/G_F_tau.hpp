@@ -18,10 +18,13 @@ namespace triqs_ctseg::measures {
     results_t &results;
     double beta;
     bool measure_F_tau;
+    bool measure_I_tau;
     gf_struct_t gf_struct;
 
     block_gf<imtime> G_tau;
     block_gf<imtime> F_tau;
+    block_gf<imtime> F_R_tau;
+    block_gf<imtime> I_tau;
 
     double Z;
 
@@ -29,7 +32,9 @@ namespace triqs_ctseg::measures {
 
     void accumulate(double s);
     void collect_results(mpi::communicator const &c);
-    double fprefactor(long const &block, std::pair<tau_t, long> const &y);
+    // Vertex factor of the improved estimators for the operator `op` of the given block.
+    // at_annihilator = true for a c operator (det.get_y), false for a c^dagger operator (det.get_x).
+    double fprefactor(long const &block, std::pair<tau_t, long> const &op, bool at_annihilator);
   };
 
 } // namespace triqs_ctseg::measures

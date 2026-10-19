@@ -98,6 +98,9 @@ namespace triqs_ctseg {
     has_Dt    = max_element(abs(D0t.data())) > 1.e-13;
     has_Jperp = max_element(abs(inputs.Jperpt.data())) > 1.e-13;
 
+    if (p.measure_I_tau and !p.measure_F_tau) TRIQS_RUNTIME_ERROR << "measure_I_tau = true requires measure_F_tau = true.";
+    if (p.measure_I_tau and has_Jperp) TRIQS_RUNTIME_ERROR << "measure_I_tau = true is not supported with Jperp interactions.";
+
     // Check: no Jperp implementation for more than 2 colors
     if (n_color != 2) {
       ALWAYS_EXPECTS((not has_Jperp), "Error : has_jperp is true and we have {} colors instead of 2", n_color);

@@ -127,6 +127,11 @@ namespace triqs_ctseg {
     /// Whether to measure \f$ F(\tau) \f$.
     bool measure_F_tau = false;
 
+    /// Whether to measure the correlators needed for the symmetric improved estimator,
+    /// \f$ F^R(\tau) \f$ (`F_R_tau`) and \f$ I(\tau) \f$ (`I_tau`).
+    /// Requires `measure_F_tau` (which provides \f$ F^L \f$) and no spin-spin interaction.
+    bool measure_I_tau = false;
+
     /// Whether to measure densities.
     bool measure_densities = true;
 

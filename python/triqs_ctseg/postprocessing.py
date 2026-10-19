@@ -176,6 +176,96 @@ def compute_sigma_hartreefock(solver):
 
 
 # =============================================================================
+# Symmetric improved estimator: density matrix and exchange term
+# =============================================================================
+
+def _fourier_wo_moments(gf_tau, mesh):
+    """Fourier transform a BlockGf in imaginary time to the fermionic mesh `mesh`,
+    imposing a zero 0th moment (no other tail information is used)."""
+    out = BlockGf(mesh=mesh, gf_struct=[(bl, g.target_shape[0]) for bl, g in gf_tau])
+    for bl, g in out:
+        g.set_from_fourier(gf_tau[bl], make_zero_tail(g, n_moments=1))
+    return out
+
+
+def density_matrix_from_F(F_tau, G0_iw, h_loc0_mat):
+    """
+    Density matrix P_ab = <c_b^dag c_a> = G_ab(0^-) of each block from G = G0 + G0 F^L at tau = 0^-,
+
+        P = P^0 - int_0^beta dtau G0(beta - tau) F^L(tau),    P^0 = G0(0^-),
+
+    made hermitian. It uses the whole F^L(tau) curve, so it is much less noisy than the single
+    bin G(beta^-); for the diagonal, the segment densities are still more accurate.
+    G0(tau) is the Fourier transform of G0_iw with the known moments 1/(i nu) and h_loc0/(i nu)^2.
+    """
+    P = {}
+    for i, (bl, F) in enumerate(F_tau):
+        dim = F.target_shape[0]
+        moments = np.zeros((3, dim, dim), dtype=complex)
+        moments[1] = np.eye(dim)
+        moments[2] = h_loc0_mat[i]
+        G0 = F.copy()
+        G0.set_from_fourier(G0_iw[bl], moments)
+        taus = np.array([float(t) for t in F.mesh.values()])
+        integrand = np.einsum('tac,tcb->tab', G0.data[::-1], F.data)  # G0(beta - tau) F^L(tau)
+        p = -G0.data[-1] - np.trapezoid(integrand, taus, axis=0)
+        P[bl] = 0.5 * (p + p.conj().T)
+    return P
+
+
+def compute_sigma_exchange(solver, G_tau, P):
+    """
+    Exchange self-energy of the symmetric improved estimator,
+
+        Sigma^X_ab(i nu) = -U_ab P_ab - FT[D_ab(tau) G_ab(tau)]    (no sum over a, b),
+
+    with P_ab = <c_b^dag c_a> = G_ab(0^-) the density matrix of each block (a dict of matrices,
+    e.g. from density_matrix_from_F). The static Fock term is restricted to a != b within a
+    block (the diagonal is part of Sigma^H). The retarded term is included if solver.D0_tau is
+    set, for all a, b in a block. Returns a BlockGf on the fermionic mesh with n_iw = solver.n_iw.
+    """
+    from scipy.interpolate import CubicSpline
+
+    U = extract_u_tensor_from_h_int(h_int=solver.h_int, gf_struct=solver.gf_struct).real
+
+    mesh = MeshImFreq(beta=solver.beta, statistic="Fermion", n_iw=solver.n_iw)
+    Sigma_X = BlockGf(mesh=mesh, gf_struct=solver.gf_struct)
+    Sigma_X.zero()
+
+    # Static Fock term: -U_ab P_ab
+    c0 = 0
+    for bl, dim in solver.gf_struct:
+        fock = np.zeros((dim, dim), dtype=complex)
+        for i, j in product(range(dim), repeat=2):
+            if i != j:
+                fock[i, j] = -U[c0 + i, c0 + j] * P[bl][i, j]
+        Sigma_X[bl].data[:] += fock
+        c0 += dim
+
+    # Retarded term: -FT[D_ab(tau) G_ab(tau)], D0 interpolated onto the G(tau) mesh
+    if solver.D0_tau is not None:
+        for bl, g_tau in G_tau:
+            D0 = solver.D0_tau[bl, bl]
+            n_tau_D = len(D0.mesh)
+            n_tau_G = len(g_tau.mesh)
+            tau_D = np.linspace(0, solver.beta, n_tau_D)
+            tau_G = np.linspace(0, solver.beta, n_tau_G)
+            # D_ab(tau) -> (D_ab(tau) + D_ba(tau)) / 2: the action depends only on this part, and the
+            # solver symmetrizes D0 in the same way (work_data.cpp)
+            D_data = 0.5 * (D0.data + D0.data.transpose(0, 2, 1))
+            D_on_G = CubicSpline(tau_D, D_data, axis=0)(tau_G)
+            if np.abs(D_on_G).max() == 0:
+                continue
+            DG = g_tau.copy()
+            DG.data[:] = D_on_G * g_tau.data
+            DG_iw = Sigma_X[bl].copy()
+            DG_iw.set_from_fourier(DG, make_zero_tail(DG_iw, n_moments=1))
+            Sigma_X[bl] << Sigma_X[bl] - DG_iw
+
+    return Sigma_X
+
+
+# =============================================================================
 # Self-energy post-processing
 # =============================================================================
 
@@ -191,7 +281,11 @@ def postprocess_sigma(
     1. Fourier transform G(tau) to G(iw)
     2. Compute fermionic Weiss field g(iw) from Delta(tau)
     3. Compute static self-energy Sigma_HF (analytically or via tail fitting)
-    4. Compute dynamic self-energy Sigma(iw) (Dyson or improved estimator)
+    4. Compute dynamic self-energy Sigma(iw): Dyson if F(tau) is not measured, the asymmetric
+       improved estimator F G^{-1} if F(tau) is measured, and the symmetric improved estimator
+       Sigma^H + Sigma^X + I - F^L G^{-1} F^R if I(tau) is measured. Each available estimator
+       is also returned separately, before tail fitting: Sigma_iw_Dyson (always), Sigma_iw_aIE
+       (if F(tau) is measured) and Sigma_iw_sIE (if I(tau) is measured), None otherwise.
     5. Tail fitting on Sigma(iw)
     6. Extract dynamic part (Sigma - Sigma_HF)
     """
@@ -219,11 +313,20 @@ def postprocess_sigma(
     symmetrize(G_iw)
 
     # 2. Compute fermionic Weiss field g(iw)
+    # The solver uses only the real diagonal of h_loc0 (the segment picture requires a diagonal
+    # local Hamiltonian), so G0 is built from the same part.
+    # TODO: reject an h_loc0 with off-diagonal elements at the input side (solve / work_data.cpp)
+    # instead of dropping them silently; then the diagonal projection here is no longer needed.
+    h_loc0_diag = [np.diag(np.diag(np.asarray(m)).real) for m in solver.h_loc0_mat]
+    max_offdiag = max(np.abs(np.asarray(m) - np.diag(np.diag(np.asarray(m)))).max() for m in solver.h_loc0_mat)
+    if max_offdiag > 1e-10:
+        mpi.report(f"WARNING: h_loc0 has off-diagonal elements (max {max_offdiag:.2e}); the solver ignores them "
+                   "and so does the post-processing.\n")
     Delta_iw = BlockGf(mesh=mesh, gf_struct=solver.gf_struct)
     Delta_known_moments = make_zero_tail(Delta_iw, n_moments=1)
     for i, bl in enumerate(solver.Delta_tau.indices):
         Delta_iw[bl].set_from_fourier(solver.Delta_tau[bl], Delta_known_moments[i])
-        G0_iw[bl] << inverse(iOmega_n - solver.h_loc0_mat[i] - Delta_iw[bl])
+        G0_iw[bl] << inverse(iOmega_n - h_loc0_diag[i] - Delta_iw[bl])
     G0_iw << make_hermitian(G0_iw)
     symmetrize(G0_iw)
 
@@ -251,21 +354,55 @@ def postprocess_sigma(
         solver.Sigma_moments = None
 
     # 4. Compute self-energy
-    if solver.results.F_tau is None:
+    Sigma_iw_Dyson = inverse(G0_iw) - inverse(G_iw)
+    Sigma_iw_aIE = None
+    Sigma_iw_sIE = None
+
+    res = solver.results
+    F_R_tau = getattr(res, 'F_R_tau', None)
+    I_tau = getattr(res, 'I_tau', None)
+
+    if res.F_tau is None:
         mpi.report("F(tau) is not measured -> Compute the self-energy via the Dyson equation.\n")
-        Sigma_iw = inverse(G0_iw) - inverse(G_iw)
+        Sigma_iw << Sigma_iw_Dyson
     else:
-        mpi.report("F(tau) is measured -> Compute the self-energy via the improved estimator.\n")
-        F_iw = G_iw.copy()
-        F_iw << 0.0
-        F_known_moments = make_zero_tail(F_iw, n_moments=1)
-        for i, bl in enumerate(F_iw.indices):
-            F_iw[bl].set_from_fourier(solver.results.F_tau[bl], F_known_moments[i])
+        F_iw = _fourier_wo_moments(res.F_tau, mesh)
         symmetrize(F_iw)
 
         # Sigma = F G^{-1} as a matrix product within each block. F is not hermitian
-        # (F(-iw)^dagger = G Sigma, not Sigma G), so only Sigma is made hermitian below.
-        Sigma_iw << F_iw * inverse(G_iw)
+        # (F(-iw)^dagger = G Sigma, not Sigma G), so only Sigma is made hermitian.
+        Sigma_iw_aIE = F_iw * inverse(G_iw)
+        Sigma_iw_aIE << make_hermitian(Sigma_iw_aIE)
+        symmetrize(Sigma_iw_aIE)
+
+        if I_tau is None or F_R_tau is None:
+            mpi.report("F(tau) is measured -> Compute the self-energy via the improved estimator.\n")
+            Sigma_iw << Sigma_iw_aIE
+        else:
+            mpi.report("F(tau), F_R(tau) and I(tau) are measured -> Compute the self-energy via the "
+                       "symmetric improved estimator.\n")
+            # The symmetric estimator uses G, F^L, F^R and I Fourier transformed with the same
+            # (zero) known 0th moment, not the tail-corrected G_iw used for Dyson and F G^{-1}.
+            G_iw_wo = _fourier_wo_moments(res.G_tau, mesh)
+            F_R_iw = _fourier_wo_moments(F_R_tau, mesh)
+            I_iw = _fourier_wo_moments(I_tau, mesh)
+            for g in (G_iw_wo, F_R_iw, I_iw):
+                symmetrize(g)
+
+            Sigma_H = compute_sigma_hartreefock(solver)
+            if symmetrize_func is not None and degenerate_blk:
+                Sigma_H = dict(zip(Sigma_H.keys(), symmetrize_func(list(Sigma_H.values()), degenerate_blk)))
+            P = density_matrix_from_F(res.F_tau, G0_iw, h_loc0_diag)
+            Sigma_X = compute_sigma_exchange(solver, res.G_tau, P)
+            symmetrize(Sigma_X)
+            Sigma_HX = Sigma_X.copy()
+            for bl, g in Sigma_HX:
+                g.data[:] += Sigma_H[bl]
+
+            Sigma_iw_sIE = Sigma_HX + I_iw - F_iw * inverse(G_iw_wo) * F_R_iw
+            Sigma_iw_sIE << make_hermitian(Sigma_iw_sIE)
+            symmetrize(Sigma_iw_sIE)
+            Sigma_iw << Sigma_iw_sIE
 
     Sigma_iw << make_hermitian(Sigma_iw)
     symmetrize(Sigma_iw)
@@ -303,6 +440,9 @@ def postprocess_sigma(
         'G_iw': G_iw,
         'G_tau': solver.results.G_tau,
         'Sigma_iw': Sigma_iw,
+        'Sigma_iw_Dyson': Sigma_iw_Dyson,
+        'Sigma_iw_aIE': Sigma_iw_aIE,
+        'Sigma_iw_sIE': Sigma_iw_sIE,
         'Sigma_dynamic': Sigma_dynamic,
         'Sigma_HartreeFock': list(Sigma_HartreeFock.values()),
     }
@@ -495,8 +635,10 @@ def postprocess(
     eps = post_proc_params.get('dlr_eps')
     if wmax is not None and eps is not None:
         from triqs.solver_utils import make_gf_dlr_imfreq
-        keys = ['Sigma_iw', 'G_iw'] + (['Pi_iw', 'W_iw', 'Chi_iw'] if has_chi else [])
+        keys = ['Sigma_iw', 'Sigma_iw_Dyson', 'Sigma_iw_aIE', 'Sigma_iw_sIE', 'G_iw'] \
+            + (['Pi_iw', 'W_iw', 'Chi_iw'] if has_chi else [])
         for k in keys:
-            pp_results[k] = make_gf_dlr_imfreq(pp_results[k], w_max=wmax, eps=eps)
+            if pp_results[k] is not None:
+                pp_results[k] = make_gf_dlr_imfreq(pp_results[k], w_max=wmax, eps=eps)
 
     return pp_results

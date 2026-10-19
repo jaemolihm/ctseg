@@ -70,6 +70,7 @@ def _prepare_solver(
     solver_params['measure_densities'] = True
     solver_params['measure_G_tau'] = not solve_density_only
     solver_params['measure_F_tau'] = not solve_density_only
+    solver_params['measure_I_tau'] = solver_params.get('measure_I_tau', False) and not solve_density_only
     solver_params['measure_nn_tau'] = not solve_density_only
 
     if isinstance(mesh, MeshDLRImFreq):
@@ -170,10 +171,13 @@ def solve_generic(
         Symmetrization function for post-processing.
     **solver_interface_params
         Solver and post-processing parameters (n_iw, n_tau, n_cycles, etc.).
+        With measure_I_tau=True the self-energy is the symmetric improved estimator.
 
     Returns
     -------
     SolverResults
+        The separate self-energy estimators are attached as the attributes Sigma_iw_Dyson,
+        Sigma_iw_aIE (F G^{-1}, if F is measured) and Sigma_iw_sIE (if I is measured), None otherwise.
     """
     S, post_proc_params = _run_solver(
         Delta_iw, h_loc0, h_int, D0_iw,
@@ -181,9 +185,14 @@ def solve_generic(
     )
 
     pp_results = postprocess(S, symmetrize_func=symmetrize_func, **post_proc_params)
+    # SolverResults has no fields for the separate self-energy estimators; attach them as attributes
+    estimators = {k: pp_results.pop(k, None) for k in ('Sigma_iw_Dyson', 'Sigma_iw_aIE', 'Sigma_iw_sIE')}
     result_kwargs = {k: v for k, v in pp_results.items() if v is not None}
     result_kwargs['Solver'] = S
-    return SolverResults(**result_kwargs)
+    results = SolverResults(**result_kwargs)
+    for k, v in estimators.items():
+        setattr(results, k, v)
+    return results
 
 
 def solve_density(

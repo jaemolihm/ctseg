@@ -71,6 +71,29 @@ The block structure and imaginary time grid for the improved estimator are the s
 The measurement is turned on by setting ``measure_F_tau`` in the ``solve_params`` to ``True``. The result of the 
 accumulation is accessible through the ``results.F_tau`` attribute of the solver object. 
 
+Symmetric improved estimator
+----------------------------
+
+The estimator above is the left correlator :math:`F^L = F`. Setting ``measure_I_tau`` to ``True`` (it requires
+``measure_F_tau``) additionally measures the right correlator :math:`F^R_{ij}(\tau) = \langle T_\tau c_{Ai}(\tau) c_{Aj}^\dagger(0)
+I_j^A(0) \rangle` and the correlator :math:`I_{ij}(\tau) = \langle T_\tau c_{Ai}(\tau) c_{Aj}^\dagger(0) I_i^A(\tau) I_j^A(0) \rangle`,
+available as ``results.F_R_tau`` and ``results.I_tau``. With these, the symmetric improved estimator
+
+.. math::
+
+    \Sigma = \Sigma^{\rm H} + \Sigma^{\rm X} + I - F^L G^{-1} F^R
+
+is accurate to higher Matsubara frequencies than :math:`F^L G^{-1}`. The Hartree term :math:`\Sigma^{\rm H}`
+is computed from the measured densities, and the exchange term
+:math:`\Sigma^{\rm X}_{ab}(i\nu) = -U_{ab} P_{ab} - \int d\tau\, e^{i\nu\tau} D_{ab}(\tau) G_{ab}(\tau)` from the
+density matrix :math:`P_{ab} = \langle c_b^\dagger c_a \rangle`, the measured :math:`G(\tau)` and the input :math:`D_0(\tau)`.
+The static Fock term is restricted to :math:`a \neq b` within a block. The off-diagonal :math:`P_{ab}` is not a segment
+quantity; it is computed as :math:`P = \mathcal{G}_0(0^-) - \int_0^\beta d\tau\, \mathcal{G}_0(\beta - \tau) F^L(\tau)`,
+which follows from :math:`G = \mathcal{G}_0 + \mathcal{G}_0 F^L` and is much less noisy than the single bin :math:`G(\beta^-)`.
+``solve_generic`` returns this estimator as ``Sigma_iw`` if ``measure_I_tau=True``. The separate estimators are
+attached to the result as ``Sigma_iw_Dyson``, ``Sigma_iw_aIE`` (:math:`F G^{-1}`) and ``Sigma_iw_sIE``. The estimator covers static and retarded density-density interactions;
+``measure_I_tau`` together with :math:`\mathcal{J}_\perp` interactions raises an error.
+
 Density
 *******
 

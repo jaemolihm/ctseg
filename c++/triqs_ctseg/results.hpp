@@ -22,6 +22,12 @@ namespace triqs_ctseg {
     /// Self-energy improved estimator \f$ F(\tau) \f$.
     std::optional<block_gf<imtime>> F_tau;
 
+    /// Right counterpart of the improved estimator, \f$ F^R(\tau) \f$.
+    std::optional<block_gf<imtime>> F_R_tau;
+
+    /// Correlator \f$ I(\tau) \f$ of the symmetric improved estimator.
+    std::optional<block_gf<imtime>> I_tau;
+
     /// Density-density time correlation function \f$ \langle n_a(\tau) n_b(0) \rangle \f$.
     std::optional<block2_gf<imtime>> nn_tau;
 

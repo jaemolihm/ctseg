@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Symmetric improved estimator
+* Add the solve parameter `measure_I_tau`, which measures the correlators `F_R_tau` and `I_tau` needed for the
+  symmetric improved estimator `Sigma = Sigma^H + Sigma^X + I - F^L G^{-1} F^R` (static and retarded
+  density-density interactions, no Jperp)
+* `postprocess_sigma` returns the symmetric estimator as `Sigma_iw` if `I_tau` is measured, and returns each available
+  estimator separately as `Sigma_iw_Dyson`, `Sigma_iw_aIE` and `Sigma_iw_sIE` (attributes of the `solve_generic` result)
+* Add `compute_sigma_exchange` for the static Fock and retarded exchange self-energy, and `density_matrix_from_F`
+  for the density matrix from F(tau), used for the Fock term
+
 ## Version 4.0.1
 
 ctseg version 4.0.1 is a patch release that pins the c2py build dependency to
