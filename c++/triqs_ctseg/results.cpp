@@ -30,6 +30,9 @@ namespace triqs_ctseg {
     h5_write(grp, "state_hist", c.state_hist);
     h5_write(grp, "g2w", c.g2w);
     h5_write(grp, "g3w", c.g3w);
+    h5_write(grp, "auto_corr_time", c.auto_corr_time);
+    h5_write(grp, "auto_corr_time_converged", c.auto_corr_time_converged);
+    h5_write(grp, "auto_corr_times", c.auto_corr_times);
   }
 
   //------------------------------------
@@ -55,6 +58,9 @@ namespace triqs_ctseg {
     h5_read(grp, "state_hist", c.state_hist);
     h5_read(grp, "g2w", c.g2w);
     h5_read(grp, "g3w", c.g3w);
+    h5_read(grp, "auto_corr_time", c.auto_corr_time);
+    h5_read(grp, "auto_corr_time_converged", c.auto_corr_time_converged);
+    h5_read(grp, "auto_corr_times", c.auto_corr_times);
   }
 
 } // namespace triqs_ctseg

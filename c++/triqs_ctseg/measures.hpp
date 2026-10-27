@@ -13,6 +13,7 @@
 #include "./measures/nn_static.hpp"
 #include "./measures/densities.hpp"
 #include "./measures/average_sign.hpp"
+#include "./measures/auto_corr_time.hpp"
 #include "./measures/pert_order.hpp"
 #include "./measures/state_hist.hpp"
 #include "./measures/four_point.hpp"

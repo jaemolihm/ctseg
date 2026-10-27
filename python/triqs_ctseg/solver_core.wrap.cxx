@@ -165,6 +165,7 @@ static int synth_constructor_9708850a(PyObject *self, PyObject *args, PyObject *
   de("measure_I_tau", self_c.measure_I_tau, true);
   de("measure_densities", self_c.measure_densities, true);
   de("measure_average_sign", self_c.measure_average_sign, true);
+  de("measure_auto_corr_time", self_c.measure_auto_corr_time, true);
   de("measure_nn_static", self_c.measure_nn_static, true);
   de("measure_nn_tau", self_c.measure_nn_tau, true);
   de("measure_nn_nu_dlr", self_c.measure_nn_nu_dlr, true);
@@ -257,35 +258,37 @@ measure_densities : {par_31}, default=true
 
 measure_average_sign : {par_32}, default=true
 
-measure_nn_static : {par_33}, default=false
+measure_auto_corr_time : {par_33}, default=true
 
-measure_nn_tau : {par_34}, default=false
+measure_nn_static : {par_34}, default=false
 
-measure_nn_nu_dlr : {par_35}, default=false
+measure_nn_tau : {par_35}, default=false
 
-measure_Sperp_tau : {par_36}, default=false
+measure_nn_nu_dlr : {par_36}, default=false
 
-measure_state_hist : {par_37}, default=false
+measure_Sperp_tau : {par_37}, default=false
 
-measure_g2w : {par_38}, default=false
+measure_state_hist : {par_38}, default=false
 
-measure_g3w : {par_39}, default=false
+measure_g2w : {par_39}, default=false
 
-imag_threshold : {par_40}, default=1.e-13
+measure_g3w : {par_40}, default=false
 
-det_init_size : {par_41}, default=100
+imag_threshold : {par_41}, default=1.e-13
 
-det_n_operations_before_check : {par_42}, default=100
+det_init_size : {par_42}, default=100
 
-det_precision_warning : {par_43}, default=1.e-8
+det_n_operations_before_check : {par_43}, default=100
 
-det_precision_error : {par_44}, default=1.e-5
+det_precision_warning : {par_44}, default=1.e-8
 
-det_singular_threshold : {par_45}, default=-1
+det_precision_error : {par_45}, default=1.e-5
 
-histogram_max_order : {par_46}, default=1000
+det_singular_threshold : {par_46}, default=-1
 
-visualize_config : {par_47}, default=false
+histogram_max_order : {par_47}, default=1000
+
+visualize_config : {par_48}, default=false
 
 )DOC",
                       "par",
@@ -304,6 +307,7 @@ visualize_config : {par_47}, default=false
                        c2py::python_typename<std::string>(),
                        c2py::python_typename<int>(),
                        c2py::python_typename<int>(),
+                       c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
                        c2py::python_typename<bool>(),
@@ -387,6 +391,9 @@ constexpr auto _c2py_doc_member_7a5ce16d =
 Requires `measure_F_tau` (which provides :math:`F^L`) and no spin-spin interaction.)DOC";
 constexpr auto _c2py_doc_member_a21447db = R"DOC(Whether to measure densities.)DOC";
 constexpr auto _c2py_doc_member_01ec2634 = R"DOC(Whether to measure the average sign.)DOC";
+constexpr auto _c2py_doc_member_624f1e17 =
+   R"DOC(Whether to measure the auto-correlation times (in MC cycles) of the sign, the perturbation orders and the
+densities.)DOC";
 constexpr auto _c2py_doc_member_ba037394 = R"DOC(Whether to measure :math:`\langle n(0) n(0) \rangle`.)DOC";
 constexpr auto _c2py_doc_member_e0376650 = R"DOC(Whether to measure :math:`\langle n(\tau) n(0) \rangle`.)DOC";
 constexpr auto _c2py_doc_member_3870093e = R"DOC(Whether to measure :math:`\langle n(\nu)n(0) \rangle`.)DOC";
@@ -443,6 +450,7 @@ static PyObject *prop_get_dict_9708850a(PyObject *self, void *) {
   dic["measure_I_tau"]                 = self_c.measure_I_tau;
   dic["measure_densities"]             = self_c.measure_densities;
   dic["measure_average_sign"]          = self_c.measure_average_sign;
+  dic["measure_auto_corr_time"]        = self_c.measure_auto_corr_time;
   dic["measure_nn_static"]             = self_c.measure_nn_static;
   dic["measure_nn_tau"]                = self_c.measure_nn_tau;
   dic["measure_nn_nu_dlr"]             = self_c.measure_nn_nu_dlr;
@@ -528,6 +536,8 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_854eef0c>[] = {
                                                                                            _c2py_doc_member_a21447db),
    c2py::getsetdef_from_member<&_c2py_cls_854eef0c::measure_average_sign, _c2py_cls_854eef0c>(
       "measure_average_sign", _c2py_doc_member_01ec2634),
+   c2py::getsetdef_from_member<&_c2py_cls_854eef0c::measure_auto_corr_time, _c2py_cls_854eef0c>(
+      "measure_auto_corr_time", _c2py_doc_member_624f1e17),
    c2py::getsetdef_from_member<&_c2py_cls_854eef0c::measure_nn_static, _c2py_cls_854eef0c>("measure_nn_static",
                                                                                            _c2py_doc_member_ba037394),
    c2py::getsetdef_from_member<&_c2py_cls_854eef0c::measure_nn_tau, _c2py_cls_854eef0c>("measure_nn_tau",
@@ -603,6 +613,9 @@ static int synth_constructor_4842f0bc(PyObject *self, PyObject *args, PyObject *
   de("g2w", self_c.g2w, false);
   de("g3w", self_c.g3w, false);
   de("average_sign", self_c.average_sign, false);
+  de("auto_corr_time", self_c.auto_corr_time, false);
+  de("auto_corr_time_converged", self_c.auto_corr_time_converged, false);
+  de("auto_corr_times", self_c.auto_corr_times, false);
   return de.check();
 }
 
@@ -648,6 +661,12 @@ g3w : {par_15}
 
 average_sign : {par_16}
 
+auto_corr_time : {par_17}
+
+auto_corr_time_converged : {par_18}
+
+auto_corr_times : {par_19}
+
 )DOC",
    "par",
    {c2py::python_typename<triqs::gfs::block_gf<triqs::mesh::imtime>>(),
@@ -667,8 +686,10 @@ average_sign : {par_16}
        std::map<std::string,
                 nda::basic_array<double, 1, nda::C_layout, 'A',
                                  nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>>>(),
-    c2py::python_typename<std::optional<std::vector<double>>>(), c2py::python_typename<std::optional<double>>(),
-    c2py::python_typename<std::optional<std::vector<double>>>(), c2py::python_typename<std::optional<double>>(),
+    c2py::python_typename<std::optional<std::vector<double>>>(),
+    c2py::python_typename<std::optional<double>>(),
+    c2py::python_typename<std::optional<std::vector<double>>>(),
+    c2py::python_typename<std::optional<double>>(),
     c2py::python_typename<std::optional<nda::basic_array<
        double, 1, nda::C_layout, 'V', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>>(),
     c2py::python_typename<std::optional<triqs::gfs::block_gf<
@@ -676,7 +697,10 @@ average_sign : {par_16}
     c2py::python_typename<std::optional<
        triqs::gfs::block_gf<triqs::mesh::prod<triqs::mesh::imfreq, triqs::mesh::imfreq, triqs::mesh::imfreq>,
                             triqs::gfs::tensor_valued<4>, nda::C_layout, 2>>>(),
-    c2py::python_typename<double>()});
+    c2py::python_typename<double>(),
+    c2py::python_typename<std::optional<double>>(),
+    c2py::python_typename<std::optional<bool>>(),
+    c2py::python_typename<std::optional<std::map<std::string, double>>>()});
 
 // ----- Method table ----
 // clang-format off
@@ -709,26 +733,41 @@ constexpr auto _c2py_doc_member_22c7a238 = R"DOC(State histogram.)DOC";
 constexpr auto _c2py_doc_member_6a60b494 = R"DOC(Three-point correlation function.)DOC";
 constexpr auto _c2py_doc_member_6a5e75fd = R"DOC(Four-point correlation function.)DOC";
 constexpr auto _c2py_doc_member_02f5ab2b = R"DOC(Average sign.)DOC";
+constexpr auto _c2py_doc_member_1b9e4134 =
+   R"DOC(Auto-correlation time in MC cycles: maximum of ``auto_corr_times`` over the series with a finite value.)DOC";
+constexpr auto _c2py_doc_member_dfef5cb4 =
+   R"DOC(Whether the auto-correlation times of all series have saturated with the bin size; if not,
+``auto_corr_time`` is a lower bound.)DOC";
+constexpr auto _c2py_doc_member_c120c2c5 =
+   R"DOC(Auto-correlation time in MC cycles of each series (``sign``, ``Delta_order``, ``Jperp_order``,
+``density_<block>_
+
+.. raw:: html
+
+   <i>``); NaN if the run is too short to estimate it.)DOC";
 static PyObject *prop_get_dict_4842f0bc(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_361be08a> *)self)->_c);
   c2py::pydict dic;
-  dic["G_tau"]               = self_c.G_tau;
-  dic["F_tau"]               = self_c.F_tau;
-  dic["F_R_tau"]             = self_c.F_R_tau;
-  dic["I_tau"]               = self_c.I_tau;
-  dic["nn_tau"]              = self_c.nn_tau;
-  dic["nn_nu_dlr"]           = self_c.nn_nu_dlr;
-  dic["Sperp_tau"]           = self_c.Sperp_tau;
-  dic["nn_static"]           = self_c.nn_static;
-  dic["densities"]           = self_c.densities;
-  dic["pert_order_Delta"]    = self_c.pert_order_Delta;
-  dic["average_order_Delta"] = self_c.average_order_Delta;
-  dic["pert_order_Jperp"]    = self_c.pert_order_Jperp;
-  dic["average_order_Jperp"] = self_c.average_order_Jperp;
-  dic["state_hist"]          = self_c.state_hist;
-  dic["g2w"]                 = self_c.g2w;
-  dic["g3w"]                 = self_c.g3w;
-  dic["average_sign"]        = self_c.average_sign;
+  dic["G_tau"]                    = self_c.G_tau;
+  dic["F_tau"]                    = self_c.F_tau;
+  dic["F_R_tau"]                  = self_c.F_R_tau;
+  dic["I_tau"]                    = self_c.I_tau;
+  dic["nn_tau"]                   = self_c.nn_tau;
+  dic["nn_nu_dlr"]                = self_c.nn_nu_dlr;
+  dic["Sperp_tau"]                = self_c.Sperp_tau;
+  dic["nn_static"]                = self_c.nn_static;
+  dic["densities"]                = self_c.densities;
+  dic["pert_order_Delta"]         = self_c.pert_order_Delta;
+  dic["average_order_Delta"]      = self_c.average_order_Delta;
+  dic["pert_order_Jperp"]         = self_c.pert_order_Jperp;
+  dic["average_order_Jperp"]      = self_c.average_order_Jperp;
+  dic["state_hist"]               = self_c.state_hist;
+  dic["g2w"]                      = self_c.g2w;
+  dic["g3w"]                      = self_c.g3w;
+  dic["average_sign"]             = self_c.average_sign;
+  dic["auto_corr_time"]           = self_c.auto_corr_time;
+  dic["auto_corr_time_converged"] = self_c.auto_corr_time_converged;
+  dic["auto_corr_times"]          = self_c.auto_corr_times;
   return dic.new_ref();
 }
 
@@ -763,6 +802,12 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_361be08a>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_361be08a::g3w, _c2py_cls_361be08a>("g3w", _c2py_doc_member_6a5e75fd),
    c2py::getsetdef_from_member<&_c2py_cls_361be08a::average_sign, _c2py_cls_361be08a>("average_sign",
                                                                                       _c2py_doc_member_02f5ab2b),
+   c2py::getsetdef_from_member<&_c2py_cls_361be08a::auto_corr_time, _c2py_cls_361be08a>("auto_corr_time",
+                                                                                        _c2py_doc_member_1b9e4134),
+   c2py::getsetdef_from_member<&_c2py_cls_361be08a::auto_corr_time_converged, _c2py_cls_361be08a>(
+      "auto_corr_time_converged", _c2py_doc_member_dfef5cb4),
+   c2py::getsetdef_from_member<&_c2py_cls_361be08a::auto_corr_times, _c2py_cls_361be08a>("auto_corr_times",
+                                                                                         _c2py_doc_member_c120c2c5),
    {"__dict__", (getter)prop_get_dict_4842f0bc, nullptr, "", nullptr},
    {nullptr, nullptr, nullptr, nullptr, nullptr}};
 

@@ -138,6 +138,10 @@ namespace triqs_ctseg {
     /// Whether to measure the average sign.
     bool measure_average_sign = true;
 
+    /// Whether to measure the auto-correlation times (in MC cycles) of the sign, the perturbation orders and the
+    /// densities.
+    bool measure_auto_corr_time = true;
+
     /// Whether to measure \f$ \langle n(0) n(0) \rangle \f$.
     bool measure_nn_static = false;
 

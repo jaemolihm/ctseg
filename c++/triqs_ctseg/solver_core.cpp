@@ -100,6 +100,8 @@ namespace triqs_ctseg {
     if (p.measure_G_tau) CTQMC.add_measure(measures::G_F_tau{p, wdata, config, results}, "G(tau)/F(tau)");
     if (p.measure_densities) CTQMC.add_measure(measures::densities{p, wdata, config, results}, "Densities");
     if (p.measure_average_sign) CTQMC.add_measure(measures::average_sign{p, wdata, config, results}, "Average Sign");
+    if (p.measure_auto_corr_time)
+      CTQMC.add_measure(measures::auto_corr_time{p, wdata, config, results}, "Auto-correlation time");
     if (p.measure_nn_static) CTQMC.add_measure(measures::nn_static{p, wdata, config, results}, "<nn>");
     if (p.measure_nn_tau) CTQMC.add_measure(measures::nn_tau{p, wdata, config, results}, "<n(tau)n(0)>");
     if (p.measure_nn_nu_dlr) CTQMC.add_measure(measures::nn_nu_dlr{p, wdata, config, results}, "<n(nu)n(-nu)>");
