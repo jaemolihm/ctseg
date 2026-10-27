@@ -11,13 +11,8 @@
 
 namespace triqs_ctseg::measures {
 
-  /// Whether a series is the same constant on all ranks, decided from the per-rank data before any reduction: the
-  /// reduced variance of a constant is not exactly 0 when the ranks have different sample counts (round-off in the
-  /// reweighted mean of log_binning::mpi_all_reduce), so the 0/0 of tau cannot detect it. Collective.
-  bool is_constant_series(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c);
-
   /// Auto-correlation time of one series (in units of samples) and whether it has saturated with the bin size; NaN
-  /// and not saturated if no bin level has 64 blocks. Collective.
+  /// and not saturated if no bin level has 64 blocks; 0 and saturated for a constant series. Collective.
   std::pair<double, bool> series_tau(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c);
 
   /// Auto-correlation times of a few series, one sample per MC cycle (tau is in units of MC cycles).
