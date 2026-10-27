@@ -237,6 +237,25 @@ This measurement computes the average sign of the weight of the configuration.
 It is always on. The result of the accumulation is accessible through the ``results.average_sign`` 
 attribute of the solver object as a double precision scalar. 
 
+Auto-correlation time
+*********************
+
+This measurement estimates the integrated auto-correlation time :math:`\tau`, in units of MC cycles, of a few
+series sampled once per cycle: the sign (``sign``), the perturbation orders in :math:`\Delta(\tau)` and
+:math:`\mathcal{J}_{\perp}(\tau)` (``Delta_order``, ``Jperp_order``, when present), and the density of each color
+(``density_{block}_{i}``). The densities also reveal slow modes at fixed order, e.g. the spin flips of a local moment.
+
+The samples are binned in blocks of :math:`2^n` cycles, and :math:`\tau_n = (s_n^2 / s_0^2 - 1)/2`, where
+:math:`s_n` is the standard error of the mean from the blocks of level :math:`n`. Only levels with at least 64 blocks
+(summed over the MPI ranks) are used, and :math:`\tau` is :math:`\tau_n` at the deepest one. If :math:`\tau_n` still
+grows from the previous level by more than twice its statistical error, :math:`\tau` is only a lower bound and the
+series is not converged; run longer. This is the same estimate as in cthyb.
+
+The measurement is turned on by default (``measure_auto_corr_time``). The results are ``results.auto_corr_times``, a
+dictionary of :math:`\tau` per series (0 for a constant series such as the sign without a sign problem, NaN if no level
+has 64 blocks), ``results.auto_corr_time``, the maximum over the series, and ``results.auto_corr_time_converged``,
+which is ``True`` if all series are converged.
+
 Perturbation order histograms
 *****************************
 

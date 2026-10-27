@@ -734,17 +734,14 @@ constexpr auto _c2py_doc_member_6a60b494 = R"DOC(Three-point correlation functio
 constexpr auto _c2py_doc_member_6a5e75fd = R"DOC(Four-point correlation function.)DOC";
 constexpr auto _c2py_doc_member_02f5ab2b = R"DOC(Average sign.)DOC";
 constexpr auto _c2py_doc_member_1b9e4134 =
-   R"DOC(Auto-correlation time in MC cycles: maximum of ``auto_corr_times`` over the series with a finite value.)DOC";
+   R"DOC(Auto-correlation time in MC cycles: maximum of ``auto_corr_times`` over the series with an estimate (0 if none).)DOC";
 constexpr auto _c2py_doc_member_dfef5cb4 =
    R"DOC(Whether the auto-correlation times of all series have saturated with the bin size; if not,
 ``auto_corr_time`` is a lower bound.)DOC";
 constexpr auto _c2py_doc_member_c120c2c5 =
    R"DOC(Auto-correlation time in MC cycles of each series (``sign``, ``Delta_order``, ``Jperp_order``,
-``density_<block>_
-
-.. raw:: html
-
-   <i>``); NaN if the run is too short to estimate it.)DOC";
+``density_{block}_{i}`` with the block name and the index within the block); 0 for a constant series; NaN if
+the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks).)DOC";
 static PyObject *prop_get_dict_4842f0bc(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_361be08a> *)self)->_c);
   c2py::pydict dic;

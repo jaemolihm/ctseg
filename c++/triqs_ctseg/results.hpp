@@ -67,7 +67,7 @@ namespace triqs_ctseg {
     /// Average sign.
     double average_sign;
 
-    /// Auto-correlation time in MC cycles: maximum of ``auto_corr_times`` over the series with a finite value.
+    /// Auto-correlation time in MC cycles: maximum of ``auto_corr_times`` over the series with an estimate (0 if none).
     std::optional<double> auto_corr_time;
 
     /// Whether the auto-correlation times of all series have saturated with the bin size; if not,
@@ -75,7 +75,8 @@ namespace triqs_ctseg {
     std::optional<bool> auto_corr_time_converged;
 
     /// Auto-correlation time in MC cycles of each series (``sign``, ``Delta_order``, ``Jperp_order``,
-    /// ``density_<block>_<i>``); NaN if the run is too short to estimate it.
+    /// ``density_{block}_{i}`` with the block name and the index within the block); 0 for a constant series; NaN if
+    /// the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks).
     std::optional<std::map<std::string, double>> auto_corr_times;
 
     static std::string hdf5_format() { return "CTSEG_Results"; }

@@ -36,3 +36,8 @@ foreach(test ${all_tests})
     )
   endif()
 endforeach()
+
+# auto_corr_time_mpi also runs on 3 ranks (unequal sample counts per rank)
+add_test(NAME auto_corr_time_mpi_np3
+  COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/auto_corr_time_mpi
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

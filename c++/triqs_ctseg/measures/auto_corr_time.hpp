@@ -11,6 +11,11 @@
 
 namespace triqs_ctseg::measures {
 
+  /// Whether a series is the same constant on all ranks, decided from the per-rank data before any reduction: the
+  /// reduced variance of a constant is not exactly 0 when the ranks have different sample counts (round-off in the
+  /// reweighted mean of log_binning::mpi_all_reduce), so the 0/0 of tau cannot detect it. Collective.
+  bool is_constant_series(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c);
+
   /// Auto-correlation times of a few series, one sample per MC cycle (tau is in units of MC cycles).
   ///
   /// Series: the sign, the Delta order (if there is a hybridization), the Jperp order (if there is a Jperp
@@ -22,7 +27,7 @@ namespace triqs_ctseg::measures {
     configuration_t const &config;
     results_t &results;
 
-    // Series names, in the order of log_accs: sign, Delta_order, Jperp_order, density_<block>_<i>
+    // Series names, in the order of log_accs: sign, Delta_order, Jperp_order, density_{block}_{i}
     std::vector<std::string> names;
 
     // One log-binning accumulator per series (unbounded, block sizes 2^n)

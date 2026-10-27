@@ -60,11 +60,25 @@ if mpi.is_master_node():
     print("length_cycle = 1: ", taus1, res1.auto_corr_time_converged)
     print("length_cycle = 50:", taus50, res50.auto_corr_time_converged)
 
-# 100 cycles: no bin level above the finest one has 64 blocks, so saturation cannot be checked.
-# Serial only: with several ranks, a rank that is done keeps sampling until all ranks are done.
+# Fixed seed in serial: the densities at length_cycle = 1 are still rising at the deepest bin level
+if mpi.size == 1:
+    assert res1.auto_corr_time_converged is False
+    assert res50.auto_corr_time_converged is True
+
+# 100 cycles: only bin level 0 has 64 blocks, so tau = tau_0 = 0 (by definition), not converged.
+# 50 cycles: no level has 64 blocks, so no series has an estimate (NaN) and auto_corr_time is 0.
+# Serial only: the block counts are summed over the ranks, so with several ranks the total number of cycles
+# gives level 1 at least 64 blocks.
 if mpi.size == 1:
     res_short = solve_anderson(n_cycles=100)
     assert res_short.auto_corr_time_converged is False
+    assert all(t == 0.0 for t in res_short.auto_corr_times.values()), res_short.auto_corr_times
+    assert res_short.auto_corr_time == 0.0
+
+    res_shorter = solve_anderson(n_cycles=50)
+    assert res_shorter.auto_corr_time_converged is False
+    assert all(math.isnan(t) for t in res_shorter.auto_corr_times.values()), res_shorter.auto_corr_times
+    assert res_shorter.auto_corr_time == 0.0
 
 # Measure turned off
 res_off = solve_anderson(n_cycles=100, measure_auto_corr_time=False)

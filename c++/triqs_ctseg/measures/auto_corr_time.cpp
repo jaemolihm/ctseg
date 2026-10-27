@@ -11,6 +11,17 @@
 
 namespace triqs_ctseg::measures {
 
+  bool is_constant_series(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c) {
+    bool const flat_here = acc.var_bins()[0] == 0.0;
+    bool const flat      = mpi::all_reduce(int(flat_here), c, MPI_LAND);
+    // Called on every rank, so the reductions match
+    double const m_min = mpi::all_reduce(acc.mean_bins()[0], c, MPI_MIN);
+    double const m_max = mpi::all_reduce(acc.mean_bins()[0], c, MPI_MAX);
+    return flat and m_min == m_max;
+  }
+
+  // -------------------------------------
+
   auto_corr_time::auto_corr_time(params_t const &, work_data_t const &wdata, configuration_t const &config,
                                  results_t &results)
      : wdata{wdata}, config{config}, results{results} {
@@ -59,25 +70,28 @@ namespace triqs_ctseg::measures {
     std::vector<bool> converged(names.size(), true);
 
     for (auto const &[k, name] : itertools::enumerate(names)) {
+      auto const &acc = log_accs[k];
+
+      // e.g. the sign of a sign-problem-free run
+      bool const flat = is_constant_series(acc, c);
+
       // All-reduces over the ranks, so every rank obtains the same result
-      auto [mean, errs, taus, effs] = log_accs[k].mean_errors_and_taus(c, min_samples);
+      auto [mean, errs, taus, effs] = acc.mean_errors_and_taus(c, min_samples);
 
       double tau = 0.0;
       if (taus.empty()) {
         // No bin level with min_samples blocks: the run is too short to estimate tau
         tau          = std::numeric_limits<double>::quiet_NaN();
         converged[k] = false;
-      } else if (!std::isfinite(taus.back())) {
-        // Zero variance (0/0, e.g. the sign of a sign-problem-free run): tau = 0, saturated
+      } else if (flat) {
+        // Zero variance: tau = 0, saturated
         tau = 0.0;
       } else {
         tau          = taus.back();
         tau_max      = std::max(tau_max, tau);
         auto const n = taus.size();
-        if (n < 2 || !std::isfinite(taus[n - 2]))
-          converged[k] = false; // no finer level to confirm saturation
-        else if (tau - taus[n - 2] > n_sigma * d_tau(tau, effs[n - 1]))
-          converged[k] = false; // still rising: lower bound
+        // No finer level to compare with, or still rising: lower bound
+        if (n < 2 or tau - taus[n - 2] > n_sigma * d_tau(tau, effs[n - 1])) converged[k] = false;
       }
       taus_out[name] = tau;
       all_converged  = all_converged and converged[k];
