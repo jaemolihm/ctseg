@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Auto-correlation time
+* Add the solve parameter `measure_auto_corr_time` (on by default), which measures the auto-correlation times in MC
+  cycles of the sign, the Delta and Jperp orders and the density of each color by log binning, as in cthyb
+* Results `auto_corr_times` (per series), `auto_corr_time` (maximum) and `auto_corr_time_converged` (whether all
+  series have saturated with the bin size; otherwise `auto_corr_time` is a lower bound)
+
 ### Symmetric improved estimator
 * Add the solve parameter `measure_I_tau`, which measures the correlators `F_R_tau` and `I_tau` needed for the
   symmetric improved estimator `Sigma = Sigma^H + Sigma^X + I - F^L G^{-1} F^R` (static and retarded
