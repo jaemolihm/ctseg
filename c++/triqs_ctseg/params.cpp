@@ -124,7 +124,7 @@ namespace triqs_ctseg {
     h5_read(grp, "measure_I_tau", c.measure_I_tau);
     h5_read(grp, "measure_densities", c.measure_densities);
     h5_read(grp, "measure_average_sign", c.measure_average_sign);
-    h5_read(grp, "measure_auto_corr_time", c.measure_auto_corr_time);
+    h5::try_read(grp, "measure_auto_corr_time", c.measure_auto_corr_time);
     h5_read(grp, "measure_nn_static", c.measure_nn_static);
     h5_read(grp, "measure_nn_tau", c.measure_nn_tau);
     h5_read(grp, "measure_nn_nu_dlr", c.measure_nn_nu_dlr);
