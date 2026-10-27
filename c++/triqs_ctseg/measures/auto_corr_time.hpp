@@ -16,6 +16,10 @@ namespace triqs_ctseg::measures {
   /// reweighted mean of log_binning::mpi_all_reduce), so the 0/0 of tau cannot detect it. Collective.
   bool is_constant_series(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c);
 
+  /// Auto-correlation time of one series (in units of samples) and whether it has saturated with the bin size; NaN
+  /// and not saturated if no bin level has 64 blocks. Collective.
+  std::pair<double, bool> series_tau(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c);
+
   /// Auto-correlation times of a few series, one sample per MC cycle (tau is in units of MC cycles).
   ///
   /// Series: the sign, the Delta order (if there is a hybridization), the Jperp order (if there is a Jperp

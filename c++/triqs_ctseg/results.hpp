@@ -76,7 +76,8 @@ namespace triqs_ctseg {
 
     /// Auto-correlation time in MC cycles of each series (``sign``, ``Delta_order``, ``Jperp_order``,
     /// ``density_{block}_{i}`` with the block name and the index within the block); 0 for a constant series; NaN if
-    /// the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks).
+    /// the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks); 0 and not
+    /// converged if only the finest level has 64 blocks.
     std::optional<std::map<std::string, double>> auto_corr_times;
 
     static std::string hdf5_format() { return "CTSEG_Results"; }

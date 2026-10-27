@@ -741,7 +741,8 @@ constexpr auto _c2py_doc_member_dfef5cb4 =
 constexpr auto _c2py_doc_member_c120c2c5 =
    R"DOC(Auto-correlation time in MC cycles of each series (``sign``, ``Delta_order``, ``Jperp_order``,
 ``density_{block}_{i}`` with the block name and the index within the block); 0 for a constant series; NaN if
-the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks).)DOC";
+the run is too short to estimate it (no bin level with 64 blocks, summed over the MPI ranks); 0 and not
+converged if only the finest level has 64 blocks.)DOC";
 static PyObject *prop_get_dict_4842f0bc(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_361be08a> *)self)->_c);
   c2py::pydict dic;

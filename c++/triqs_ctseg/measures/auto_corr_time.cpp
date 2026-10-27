@@ -4,6 +4,7 @@
 // See LICENSE in the root of this distribution for details.
 
 #include "auto_corr_time.hpp"
+#include <array>
 #include <cmath>
 #include <itertools/itertools.hpp>
 #include <limits>
@@ -12,12 +13,47 @@
 namespace triqs_ctseg::measures {
 
   bool is_constant_series(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c) {
-    bool const flat_here = acc.var_bins()[0] == 0.0;
-    bool const flat      = mpi::all_reduce(int(flat_here), c, MPI_LAND);
-    // Called on every rank, so the reductions match
-    double const m_min = mpi::all_reduce(acc.mean_bins()[0], c, MPI_MIN);
-    double const m_max = mpi::all_reduce(acc.mean_bins()[0], c, MPI_MAX);
-    return flat and m_min == m_max;
+    // A rank without samples (e.g. max_time reached during warmup) holds the zeroed initial sample: ignore it
+    bool const empty = acc.count() == 0;
+    bool const flat  = mpi::all_reduce(int(empty or acc.var_bins()[0] == 0.0), c, MPI_LAND);
+    constexpr double inf = std::numeric_limits<double>::infinity();
+    double const m       = acc.mean_bins()[0];
+    // {min, -max} of the means over the ranks with samples
+    auto const m_ext = mpi::all_reduce(std::array<double, 2>{empty ? inf : m, empty ? inf : -m}, c, MPI_MIN);
+    return flat and m_ext[0] == -m_ext[1];
+  }
+
+  // -------------------------------------
+
+  std::pair<double, bool> series_tau(triqs::stat::log_binning<double> const &acc, mpi::communicator const &c) {
+
+    // tau saturates at large bin size. We report it at the deepest bin level with >= min_samples blocks and flag it
+    // as a lower bound if its finer neighbour (half the bin size) is more than n_sigma errors below it. The error of
+    // tau from M blocks is d_tau = (tau + 1/2) * sqrt(2 / (M - 1)) (variance of a variance); the deeper level
+    // dominates the uncertainty, so its d_tau is the yardstick. Same rules as cthyb's measure_auto_corr_time.
+    constexpr int min_samples = 64;
+    constexpr double n_sigma  = 2.0;
+
+    auto d_tau = [](double tau, long M) { return (tau + 0.5) * std::sqrt(2.0 / static_cast<double>(M - 1)); };
+
+    // e.g. the sign of a sign-problem-free run
+    bool const flat = is_constant_series(acc, c);
+
+    // All-reduces over the ranks, so every rank obtains the same result
+    auto [mean, errs, taus, effs] = acc.mean_errors_and_taus(c, min_samples);
+
+    // No bin level with min_samples blocks: the run is too short to estimate tau
+    if (taus.empty()) return {std::numeric_limits<double>::quiet_NaN(), false};
+
+    // Zero variance: tau = 0, saturated
+    if (flat) return {0.0, true};
+
+    double const tau = taus.back();
+    auto const n     = taus.size();
+    // Only level 0 (tau_0 = 0 by definition), not finite, or still rising: lower bound
+    bool const converged =
+       n >= 2 and std::isfinite(tau) and std::isfinite(taus[n - 2]) and tau - taus[n - 2] <= n_sigma * d_tau(tau, effs[n - 1]);
+    return {tau, converged};
   }
 
   // -------------------------------------
@@ -55,46 +91,17 @@ namespace triqs_ctseg::measures {
 
   void auto_corr_time::collect_results(mpi::communicator const &c) {
 
-    // tau saturates at large bin size. We report it at the deepest bin level with >= min_samples blocks and flag it
-    // as a lower bound if its finer neighbour (half the bin size) is more than n_sigma errors below it. The error of
-    // tau from M blocks is d_tau = (tau + 1/2) * sqrt(2 / (M - 1)) (variance of a variance); the deeper level
-    // dominates the uncertainty, so its d_tau is the yardstick. Same rule as cthyb's measure_auto_corr_time.
-    constexpr int min_samples = 64;
-    constexpr double n_sigma  = 2.0;
-
-    auto d_tau = [](double tau, long M) { return (tau + 0.5) * std::sqrt(2.0 / static_cast<double>(M - 1)); };
-
     double tau_max     = 0.0;
     bool all_converged = true;
     std::map<std::string, double> taus_out;
-    std::vector<bool> converged(names.size(), true);
+    std::vector<bool> converged(names.size());
 
     for (auto const &[k, name] : itertools::enumerate(names)) {
-      auto const &acc = log_accs[k];
-
-      // e.g. the sign of a sign-problem-free run
-      bool const flat = is_constant_series(acc, c);
-
-      // All-reduces over the ranks, so every rank obtains the same result
-      auto [mean, errs, taus, effs] = acc.mean_errors_and_taus(c, min_samples);
-
-      double tau = 0.0;
-      if (taus.empty()) {
-        // No bin level with min_samples blocks: the run is too short to estimate tau
-        tau          = std::numeric_limits<double>::quiet_NaN();
-        converged[k] = false;
-      } else if (flat) {
-        // Zero variance: tau = 0, saturated
-        tau = 0.0;
-      } else {
-        tau          = taus.back();
-        tau_max      = std::max(tau_max, tau);
-        auto const n = taus.size();
-        // No finer level to compare with, or still rising: lower bound
-        if (n < 2 or tau - taus[n - 2] > n_sigma * d_tau(tau, effs[n - 1])) converged[k] = false;
-      }
+      auto const [tau, conv] = series_tau(log_accs[k], c);
+      if (std::isfinite(tau)) tau_max = std::max(tau_max, tau);
       taus_out[name] = tau;
-      all_converged  = all_converged and converged[k];
+      converged[k]   = conv;
+      all_converged  = all_converged and conv;
     }
 
     if (c.rank() == 0) {

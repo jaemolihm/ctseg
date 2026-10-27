@@ -252,8 +252,8 @@ grows from the previous level by more than twice its statistical error, :math:`\
 series is not converged; run longer. This is the same estimate as in cthyb.
 
 The measurement is turned on by default (``measure_auto_corr_time``). The results are ``results.auto_corr_times``, a
-dictionary of :math:`\tau` per series (0 for a constant series such as the sign without a sign problem, NaN if no level
-has 64 blocks), ``results.auto_corr_time``, the maximum over the series, and ``results.auto_corr_time_converged``,
+dictionary of :math:`\tau` per series (0 for a constant series such as the sign without a sign problem; NaN if no level
+has 64 blocks; 0 and not converged if only the finest level has 64 blocks, since :math:`\tau_0 = 0` by definition), ``results.auto_corr_time``, the maximum over the series, and ``results.auto_corr_time_converged``,
 which is ``True`` if all series are converged.
 
 Perturbation order histograms
